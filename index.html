@@ -418,17 +418,9 @@ function startMic(){
 function micLoop(){
   if(!micOk||mode!=='pc') return;
   analyser.getByteFrequencyData(freqData);
-
-  // overall RMS → dB
-  var sum=0;
-  for(var i=0;i<freqData.length;i++) sum+=(freqData[i]/255)*(freqData[i]/255);
-  var rms=Math.sqrt(sum/freqData.length);
-  var db=rms>0?Math.round(20*Math.log10(rms)+90):0;
-
-  // mid-frequency energy (300–3000 Hz) for drag detection
-  var midEnergy=getMidEnergy();
-
-  processLevels(db, midEnergy, db);
+  var bassDb=getBandDb(20,200);    // stomp zone — deep impact
+  var scrapeDb=getBandDb(300,1500); // drag zone — furniture scrape
+  processLevels(bassDb, scrapeDb);
   rafId=requestAnimationFrame(micLoop);
 }
 
@@ -438,64 +430,79 @@ function stopMic(){
   micOk=false;
 }
 
+/*
+  getBandDb — returns dB energy for a specific frequency band only.
+  Voices: 80–255 Hz (mostly mid, little bass)
+  Music: spread across all bands
+  Stomp impact: heavy 20–200 Hz bass spike, short duration
+  Furniture drag: sustained 300–1500 Hz scraping energy
+  By isolating bands we ignore irrelevant sounds.
+*/
+function getBandDb(loHz, hiHz){
+  var sr=actx.sampleRate;
+  var binHz=sr/analyser.fftSize;
+  var lo=Math.max(0,Math.floor(loHz/binHz));
+  var hi=Math.min(freqData.length-1,Math.floor(hiHz/binHz));
+  var sum=0, count=0;
+  for(var i=lo;i<=hi;i++){sum+=(freqData[i]/255)*(freqData[i]/255);count++;}
+  var rms=count>0?Math.sqrt(sum/count):0;
+  return rms>0?Math.round(20*Math.log10(rms)+90):0;
+}
+
 /* ── PHONE MOTION ── */
 function onMotion(e){
   if(mode!=='phone') return;
   var acc=e.accelerationIncludingGravity; if(!acc) return;
   var x=acc.x||0,y=acc.y||0,z=acc.z||0;
   var g=Math.sqrt(x*x+y*y+z*z)/9.8;
-  // phone uses g-force for both (no freq separation available from accelerometer)
-  processLevels(g, g, g);
-}
-
-/* ── FREQUENCY ANALYSIS (PC only) ── */
-function getMidEnergy(){
-  // bins covering ~300–3000 Hz — the drag/scrape zone
-  var sr=actx.sampleRate;
-  var binHz=sr/analyser.fftSize;
-  var lo=Math.floor(300/binHz), hi=Math.floor(3000/binHz);
-  var sum=0, count=0;
-  for(var i=lo;i<=hi&&i<freqData.length;i++){sum+=(freqData[i]/255)*(freqData[i]/255);count++;}
-  var rms=count>0?Math.sqrt(sum/count):0;
-  return rms>0?Math.round(20*Math.log10(rms)+90):0;
+  // accelerometer naturally filters air sound — vibration only
+  processLevels(g, g);
 }
 
 /* ── MAIN LEVEL PROCESSOR ── */
-function processLevels(overall, midLevel, displayVal){
+/*
+  PC stomp: bass energy (20–200 Hz) spike — ignores voices, music, typing
+  PC drag: scrape energy (300–1500 Hz) sustained — ignores bass thuds
+  Phone: g-force handles both naturally via floor vibration
+*/
+var prevBass=0; // track bass rise speed for spike detection
+function processLevels(stompVal, dragVal){
   var ready=(mode==='phone')?(motionOk&&soundOk):(micOk);
   if(!ready) return;
 
   var st=stompThresh(), dt=dragThresh();
   var isPC=(mode==='pc');
 
-  // UPDATE STOMP METER
-  var sPct=isPC?Math.min(100,(overall/90)*100):Math.min(100,(overall/25)*100);
-  var sLabel=isPC?(overall+' dB'):(overall.toFixed?overall.toFixed(2)+' G':overall+' G');
-  updateMiniMeter('stompMeter','stompBar',sLabel,sPct,overall,st,'s');
+  // STOMP METER
+  var sPct=isPC?Math.min(100,(stompVal/90)*100):Math.min(100,(stompVal/25)*100);
+  var sLabel=isPC?(stompVal+' dB'):(stompVal.toFixed?stompVal.toFixed(2)+' G':stompVal+' G');
+  updateMiniMeter('stompMeter','stompBar',sLabel,sPct,stompVal,st,'s');
 
-  // UPDATE DRAG METER — show mid energy on PC, overall on phone
-  var dVal=isPC?midLevel:overall;
-  var dPct=isPC?Math.min(100,(dVal/90)*100):Math.min(100,(dVal/25)*100);
-  var dLabel=isPC?(dVal+' dB'):(dVal.toFixed?dVal.toFixed(2)+' G':dVal+' G');
-  updateMiniMeter('dragMeter','dragBar',dLabel,dPct,dVal,dt,'d');
+  // DRAG METER
+  var dPct=isPC?Math.min(100,(dragVal/90)*100):Math.min(100,(dragVal/25)*100);
+  var dLabel=isPC?(dragVal+' dB'):(dragVal.toFixed?dragVal.toFixed(2)+' G':dragVal+' G');
+  updateMiniMeter('dragMeter','dragBar',dLabel,dPct,dragVal,dt,'d');
 
-  // STOMP DETECTION — short spike
-  if(overall>st&&!stompCooling){
-    if(!stompActive){
-      stompActive=true; stompStart=Date.now();
-    }
+  // STOMP DETECTION
+  // PC: bass spike only — must also rise quickly (impact character)
+  // Phone: sharp g-force spike
+  var bassRise=stompVal-prevBass;
+  prevBass=stompVal;
+  var isSpike=isPC?(bassRise>4):(true); // rising fast = impact, not sustained hum
+  if(stompVal>st&&isSpike&&!stompCooling&&!dragActive){
+    if(!stompActive){ stompActive=true; stompStart=Date.now(); }
     if(stompEndTimer) clearTimeout(stompEndTimer);
     stompEndTimer=setTimeout(stompEnded,350);
   }
 
-  // DRAG DETECTION — sustained mid-frequency noise
-  if(dVal>dt&&!dragCooling){
-    if(!dragActive){
-      dragActive=true; dragStart=Date.now();
-      setSdot('dragging','Dragging detected... measuring duration 〰️');
-    }
+  // DRAG DETECTION
+  // PC: sustained scrape band energy — must NOT be a short spike
+  // Phone: sustained g-force
+  // Extra guard: ignore if stomp just fired (cooldown overlap)
+  if(dragVal>dt&&!dragCooling&&!stompCooling){
+    if(!dragActive){ dragActive=true; dragStart=Date.now(); setSdot('dragging','Dragging detected... measuring duration 〰️'); }
     if(dragEndTimer) clearTimeout(dragEndTimer);
-    dragEndTimer=setTimeout(dragEnded,600); // longer settle for drag
+    dragEndTimer=setTimeout(dragEnded,700);
   }
 }
 
@@ -559,15 +566,20 @@ function scheduleRevenge(type, dur){
 function fireRevenge(type,dur){
   setSdot(type==='stomp'?'revenging':'drag-revenge',
     (type==='stomp'?'💥 STOMP':'〰️ DRAG')+' REVENGE FIRING 😤 ('+msToStr(dur)+')');
-  if(type==='stomp') playStompRevenge(dur);
-  else playDragRevenge(dur);
-  setTimeout(function(){
-    setSdot('on','Listening... waiting for upstairs gremlin 👀');
-    if(type==='stomp') stompCooling=false;
-    else dragCooling=false;
-  }, dur+500);
   if(type==='stomp') stompCooling=true;
   else dragCooling=true;
+  // resume audio context first — iOS suspends it after inactivity
+  var playFn=function(){
+    if(type==='stomp') playStompRevenge(dur);
+    else playDragRevenge(dur);
+    setTimeout(function(){
+      setSdot('on','Listening... waiting for upstairs gremlin 👀');
+      if(type==='stomp') stompCooling=false;
+      else dragCooling=false;
+    },dur+500);
+  };
+  if(actx&&actx.state==='suspended'){ actx.resume().then(playFn); }
+  else { playFn(); }
 }
 
 function cancelAll(){
@@ -595,7 +607,7 @@ function makeOut(ctx){
 /* STOMP SOUNDS */
 function playStompRevenge(dur){
   if(!actx){armSound();return;}
-  var ctx=actx; if(ctx.state==='suspended') ctx.resume();
+  var ctx=actx;
   if(!dur||dur<500) dur=2000;
   var secs=dur/1000;
   if(selStomp==='thud') playThud(ctx,secs);
@@ -701,7 +713,7 @@ function playKnock(ctx,secs){
 */
 function playDragRevenge(dur){
   if(!actx){armSound();return;}
-  var ctx=actx; if(ctx.state==='suspended') ctx.resume();
+  var ctx=actx;
   if(!dur||dur<1000) dur=3000;
   var secs=dur/1000;
   stopDragSound();
@@ -845,8 +857,16 @@ function toggleAuto(){
   document.getElementById('tog').classList.toggle('on',autoOn);
 }
 
-function testStomp(){ if(!actx) armSound(); playStompRevenge(2000); }
-function testDrag(){ if(!actx) armSound(); playDragRevenge(3000); }
+function testStomp(){
+  if(!actx) armSound();
+  var fn=function(){ playStompRevenge(2000); };
+  if(actx&&actx.state==='suspended'){ actx.resume().then(fn); } else { fn(); }
+}
+function testDrag(){
+  if(!actx) armSound();
+  var fn=function(){ playDragRevenge(3000); };
+  if(actx&&actx.state==='suspended'){ actx.resume().then(fn); } else { fn(); }
+}
 
 function msToStr(ms){
   if(ms<1000) return ms+'ms';
