@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stomp Revenge</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0d0d0d;color:#f0f0f0;min-height:100vh;padding:24px 16px;}
+  .wrap{max-width:440px;margin:0 auto;}
+  h1{font-size:26px;font-weight:800;text-align:center;color:#ff3b5c;letter-spacing:3px;margin-bottom:4px;}
+  .sub{font-size:11px;color:#555;text-align:center;letter-spacing:2px;margin-bottom:20px;}
+  .mode-row{display:flex;gap:8px;margin-bottom:16px;}
+  .mode-btn{flex:1;padding:11px;border-radius:12px;border:1px solid #2a2a2a;background:#1a1a1a;color:#666;font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all 0.2s;}
+  .mode-btn.active{border-color:#ff3b5c;background:#2a0d12;color:#ff3b5c;}
+  .card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:16px 18px;margin-bottom:12px;}
+  .card-title{font-size:10px;color:#555;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px;}
+  /* accent colors per event type */
+  .card.stomp-card{border-color:#2a1a1a;}
+  .card.drag-card{border-color:#1a1a2a;}
+  .card-title.stomp{color:#ff3b5c;}
+  .card-title.drag{color:#4a9eff;}
+  .step-btn{width:100%;padding:13px 16px;border-radius:12px;border:1px solid #2a2a2a;background:#222;color:#888;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:8px;text-align:left;display:flex;align-items:center;gap:10px;transition:all 0.2s;}
+  .step-btn:last-child{margin-bottom:0;}
+  .step-btn.done{border-color:#1a7a4a;color:#2ecc71;background:#0d2a1a;}
+  .step-btn.error{border-color:#7a1a1a;color:#ff3b5c;background:#2a0d0d;}
+  .dot{width:10px;height:10px;border-radius:50%;background:#333;flex-shrink:0;transition:background 0.3s;}
+  .dot.done{background:#2ecc71;}
+  .dot.error{background:#ff3b5c;}
+  /* DUAL METER */
+  .meter-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;}
+  .meter-box{background:#111;border-radius:10px;padding:10px 12px;border:1px solid #222;}
+  .meter-box-title{font-size:10px;letter-spacing:2px;margin-bottom:6px;}
+  .meter-box-title.s{color:#ff3b5c;}
+  .meter-box-title.d{color:#4a9eff;}
+  .meter-num{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;transition:color 0.1s;margin-bottom:6px;}
+  .meter-num.green{color:#2ecc71;}
+  .meter-num.warn{color:#f39c12;}
+  .meter-num.danger{color:#ff3b5c;}
+  .meter-num.drag-active{color:#4a9eff;}
+  .mini-bar-track{height:6px;background:#222;border-radius:3px;overflow:hidden;}
+  .mini-bar{height:100%;width:0%;border-radius:3px;transition:width 0.06s,background 0.1s;background:#2ecc71;}
+  .mini-bar.warn{background:#f39c12;}
+  .mini-bar.danger{background:#ff3b5c;}
+  .mini-bar.drag{background:#4a9eff;}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  .row label{font-size:12px;color:#666;white-space:nowrap;min-width:90px;}
+  .row input[type=range]{flex:1;accent-color:#ff3b5c;cursor:pointer;}
+  .row input[type=range].blue{accent-color:#4a9eff;}
+  .row span{font-size:13px;font-weight:700;color:#f0f0f0;min-width:50px;text-align:right;}
+  .status-row{display:flex;align-items:center;gap:8px;margin-top:10px;}
+  .sdot{width:8px;height:8px;border-radius:50%;background:#333;flex-shrink:0;transition:all 0.2s;}
+  .sdot.on{background:#2ecc71;box-shadow:0 0 6px #2ecc71;}
+  .sdot.stomping{background:#f39c12;box-shadow:0 0 8px #f39c12;}
+  .sdot.revenging{background:#ff3b5c;box-shadow:0 0 8px #ff3b5c;}
+  .sdot.dragging{background:#4a9eff;box-shadow:0 0 8px #4a9eff;}
+  .sdot.drag-revenge{background:#a040ff;box-shadow:0 0 8px #a040ff;}
+  .stext{font-size:12px;color:#666;}
+  /* SOUND PICKERS */
+  .sound-section{margin-bottom:10px;}
+  .sound-section-label{font-size:11px;color:#888;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+  .sound-section-label span.badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;}
+  .badge.stomp-badge{background:#2a0d12;color:#ff3b5c;border:1px solid #4a1a1a;}
+  .badge.drag-badge{background:#0d122a;color:#4a9eff;border:1px solid #1a2a4a;}
+  .badge.hamster-badge{background:#0d2a0d;color:#2ecc71;border:1px solid #1a4a1a;font-size:9px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
+  .sbtn{padding:10px 6px;border-radius:10px;border:1px solid #2a2a2a;background:#222;color:#888;font-size:12px;cursor:pointer;text-align:center;transition:all 0.15s;}
+  .sbtn.sel-stomp{border-color:#7a1a1a;background:#1a0d0d;color:#ff3b5c;}
+  .sbtn.sel-drag{border-color:#1a2a7a;background:#0d0d1a;color:#4a9eff;}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#222;border-radius:10px;border:1px solid #2a2a2a;margin-bottom:8px;}
+  .tl{font-size:13px;color:#ccc;}
+  .tog{width:44px;height:26px;border-radius:13px;background:#333;border:none;cursor:pointer;position:relative;flex-shrink:0;transition:background 0.2s;}
+  .tog.on{background:#2ecc71;}
+  .tog::after{content:'';position:absolute;width:20px;height:20px;background:#fff;border-radius:50%;top:3px;left:3px;transition:left 0.2s;}
+  .tog.on::after{left:21px;}
+  .btn-row{display:flex;gap:8px;}
+  .abtn{flex:1;padding:11px;border-radius:10px;border:1px solid #2a2a2a;background:#222;color:#888;font-size:12px;cursor:pointer;transition:all 0.15s;}
+  .abtn:hover{border-color:#444;color:#ccc;}
+  .abtn:active{transform:scale(0.97);}
+  /* COUNTDOWN */
+  .countdown-wrap{display:none;flex-direction:column;align-items:stretch;padding:8px 0 2px;}
+  .countdown-wrap.show{display:flex;}
+  .countdown-label{font-size:11px;letter-spacing:2px;margin-bottom:5px;}
+  .countdown-label.s{color:#f39c12;}
+  .countdown-label.d{color:#4a9eff;}
+  .countdown-bar-track{height:5px;background:#222;border-radius:3px;overflow:hidden;margin-bottom:4px;}
+  .countdown-bar{height:100%;width:100%;border-radius:3px;transition:width 0.1s linear;}
+  .countdown-bar.s{background:#f39c12;}
+  .countdown-bar.d{background:#4a9eff;}
+  /* LOGS */
+  .logs-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .log-box{background:#111;border-radius:10px;padding:10px 12px;border:1px solid #222;}
+  .log-box-title{font-size:10px;letter-spacing:2px;margin-bottom:8px;}
+  .log-box-title.s{color:#ff3b5c;}
+  .log-box-title.d{color:#4a9eff;}
+  .log-count{font-size:18px;font-weight:800;margin-bottom:8px;}
+  .log-count.s{color:#ff3b5c;}
+  .log-count.d{color:#4a9eff;}
+  .log-list{max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;}
+  .log-item{padding:6px 8px;background:#1a1a1a;border-radius:6px;font-size:11px;animation:slideIn 0.2s ease;}
+  .log-item.s{border-left:2px solid #ff3b5c;}
+  .log-item.d{border-left:2px solid #4a9eff;}
+  @keyframes slideIn{from{opacity:0;transform:translateX(-6px);}to{opacity:1;transform:none;}}
+  .li-row{display:flex;justify-content:space-between;}
+  .li-num{color:#666;}
+  .li-val{font-weight:700;}
+  .li-val.s{color:#ff3b5c;}
+  .li-val.d{color:#4a9eff;}
+  .li-tm{color:#444;font-size:10px;}
+  .li-dur{color:#f39c12;font-size:10px;}
+  .empty{text-align:center;color:#333;font-size:11px;padding:16px 0;}
+  .info-box{background:#1a1a0a;border:1px solid #3a3a1a;border-radius:10px;padding:12px 14px;font-size:12px;color:#aaa;line-height:1.8;margin-top:10px;}
+  .info-box strong{color:#f39c12;}
+  .hamster-note{background:#0d1a0d;border:1px solid #1a3a1a;border-radius:8px;padding:8px 12px;font-size:11px;color:#2ecc71;margin-top:6px;line-height:1.6;}
+  .tip{text-align:center;font-size:11px;color:#444;margin-top:10px;padding-bottom:20px;line-height:1.6;}
+  .flash{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:999;transition:opacity 0.15s;}
+  .flash.stomp-flash{background:rgba(255,59,92,0.1);}
+  .flash.drag-flash{background:rgba(74,158,255,0.1);}
+  .flash.on{opacity:1;transition:none;}
+  .hidden{display:none;}
+  .dur-badge{display:inline-block;font-size:10px;border-radius:5px;padding:2px 7px;margin-top:4px;}
+  .dur-badge.s{color:#f39c12;border:1px solid #3a2a00;background:#1a1500;}
+  .dur-badge.d{color:#4a9eff;border:1px solid #00203a;background:#001525;}
+</style>
+</head>
+<body>
+<div class="flash" id="flash"></div>
+<div class="wrap">
+  <h1>STOMP REVENGE</h1>
+  <div class="sub">UPSTAIRS GREMLIN TRAP 😈</div>
+
+  <!-- MODE -->
+  <div class="mode-row">
+    <button class="mode-btn active" id="modePhone" onclick="switchMode('phone')">📱 iPhone (vibration)</button>
+    <button class="mode-btn" id="modePC" onclick="switchMode('pc')">💻 Windows PC (mic)</button>
+  </div>
+
+  <!-- PHONE SETUP -->
+  <div class="card" id="phoneSetup">
+    <div class="card-title">Setup — do these first</div>
+    <button class="step-btn" id="motionBtn" onclick="requestMotion()">
+      <span class="dot" id="motionDot"></span>
+      <span id="motionLabel">Step 1 — Allow motion sensor</span>
+    </button>
+    <button class="step-btn" id="soundBtn" onclick="armSound()">
+      <span class="dot" id="soundDot"></span>
+      <span id="soundLabel">Step 2 — Arm the sound</span>
+    </button>
+  </div>
+
+  <!-- PC SETUP -->
+  <div class="card hidden" id="pcSetup">
+    <div class="card-title">Setup</div>
+    <button class="step-btn" id="micBtn" onclick="startMic()">
+      <span class="dot" id="micDot"></span>
+      <span id="micLabel">Click here — allow microphone access</span>
+    </button>
+    <div class="info-box hidden" id="micInfo"></div>
+  </div>
+
+  <!-- DUAL METER -->
+  <div class="card">
+    <div class="card-title" id="meterLabel">Live detection</div>
+    <div class="meter-grid">
+      <div class="meter-box">
+        <div class="meter-box-title s">💥 STOMP</div>
+        <div class="meter-num green" id="stompMeter">0.00</div>
+        <div class="mini-bar-track"><div class="mini-bar" id="stompBar"></div></div>
+      </div>
+      <div class="meter-box">
+        <div class="meter-box-title d">〰️ DRAG</div>
+        <div class="meter-num green" id="dragMeter">0.00</div>
+        <div class="mini-bar-track"><div class="mini-bar" id="dragBar"></div></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <label>Stomp threshold</label>
+      <input type="range" min="1" max="25" value="8" step="1" id="stompThresh" oninput="document.getElementById('stv').textContent=this.value">
+      <span id="stv">8</span>
+    </div>
+    <div style="font-size:10px;color:#444;margin:-4px 0 8px 0;">← more sensitive &nbsp;·&nbsp; less sensitive →</div>
+    <div class="row">
+      <label>Drag threshold</label>
+      <input type="range" min="1" max="25" value="5" step="1" id="dragThresh" class="blue" oninput="document.getElementById('dtv').textContent=this.value">
+      <span id="dtv">5</span>
+    </div>
+    <div style="font-size:10px;color:#444;margin:-4px 0 8px 0;">← triggers easier &nbsp;·&nbsp; triggers harder →</div>
+    <div class="row">
+      <label>Drag min. duration</label>
+      <input type="range" min="1" max="5" value="2" step="1" id="dragMinDur" class="blue" oninput="document.getElementById('dmd').textContent=this.value+'s'">
+      <span id="dmd">2s</span>
+    </div>
+    <div style="font-size:10px;color:#444;margin:-4px 0 8px 0;">← shorter drag counts &nbsp;·&nbsp; longer drag required →</div>
+
+    <div class="status-row">
+      <div class="sdot" id="sdot"></div>
+      <span class="stext" id="stext">Idle — complete setup above</span>
+    </div>
+    <div id="stompDurBadge"></div>
+    <div id="dragDurBadge"></div>
+  </div>
+
+  <!-- REVENGE SETTINGS -->
+  <div class="card">
+    <div class="card-title">Revenge sounds</div>
+
+    <!-- stomp sounds -->
+    <div class="sound-section">
+      <div class="sound-section-label">
+        <span class="badge stomp-badge">STOMP</span> Choose revenge sound
+      </div>
+      <div class="grid2">
+        <button class="sbtn sel-stomp" onclick="pickStomp(this,'thud')">💥 Ceiling thud</button>
+        <button class="sbtn" onclick="pickStomp(this,'bass')">🔊 Bass boom</button>
+        <button class="sbtn" onclick="pickStomp(this,'alarm')">🚨 Alarm beep</button>
+        <button class="sbtn" onclick="pickStomp(this,'knock')">🚪 Loud knock</button>
+      </div>
+    </div>
+
+    <!-- drag sound -->
+    <div class="sound-section" style="margin-top:10px;">
+      <div class="sound-section-label">
+        <span class="badge drag-badge">DRAG</span> Deep sub-bass rumble (55–85 Hz)
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <label>Volume</label>
+      <input type="range" min="1" max="10" value="10" step="1" id="volSlider" oninput="document.getElementById('volVal').textContent=this.value">
+      <span id="volVal">10</span>
+    </div>
+    <div class="row">
+      <label>Delay (sec)</label>
+      <input type="range" min="0" max="10" value="4" step="1" id="delaySlider" oninput="document.getElementById('delayVal').textContent=this.value+'s'">
+      <span id="delayVal">4s</span>
+    </div>
+
+    <!-- STOMP countdown -->
+    <div class="countdown-wrap" id="stompCountdown">
+      <div class="countdown-label s" id="stompCountdownLabel">STOMP REVENGE IN 4s...</div>
+      <div class="countdown-bar-track"><div class="countdown-bar s" id="stompCountdownBar"></div></div>
+    </div>
+    <!-- DRAG countdown -->
+    <div class="countdown-wrap" id="dragCountdown">
+      <div class="countdown-label d" id="dragCountdownLabel">DRAG REVENGE IN 4s...</div>
+      <div class="countdown-bar-track"><div class="countdown-bar d" id="dragCountdownBar"></div></div>
+    </div>
+
+    <div class="toggle-row" style="margin-top:10px;">
+      <span class="tl">Auto-revenge (both)</span>
+      <button class="tog on" id="tog" onclick="toggleAuto()"></button>
+    </div>
+    <div class="btn-row">
+      <button class="abtn" onclick="testStomp()">💥 Test stomp</button>
+      <button class="abtn" onclick="testDrag()">〰️ Test drag</button>
+      <button class="abtn" onclick="clearLogs()">🗑 Clear</button>
+    </div>
+  </div>
+
+  <!-- LOGS -->
+  <div class="card">
+    <div class="card-title">Detection log</div>
+    <div class="logs-grid">
+      <div class="log-box">
+        <div class="log-box-title s">💥 STOMPS</div>
+        <div class="log-count s" id="stompCount">0</div>
+        <div class="log-list" id="stompLog"><div class="empty" id="stompEmpty">None yet</div></div>
+      </div>
+      <div class="log-box">
+        <div class="log-box-title d">〰️ DRAGS</div>
+        <div class="log-count d" id="dragCount">0</div>
+        <div class="log-list" id="dragLog"><div class="empty" id="dragEmpty">None yet</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip" id="tipText">📱 Place phone flat on floor for best detection</div>
+</div>
+
+<script>
+var mode='phone';
+var motionOk=false,soundOk=false,micOk=false;
+var autoOn=true,selStomp='thud';
+var actx=null,analyser=null,micStream=null,rafId=null;
+
+// stomp state
+var stompActive=false,stompStart=0,stompEndTimer=null;
+var stompCooling=false,stompTotal=0;
+var stompRevengeTimer=null,stompCountdownRaf=null;
+
+// drag state
+var dragActive=false,dragStart=0,dragEndTimer=null;
+var dragCooling=false,dragTotal=0;
+var dragRevengeTimer=null,dragCountdownRaf=null;
+var dragNodes=[];  // currently playing drag revenge nodes
+
+// freq analysis buffers
+var freqData=null;
+
+function vol(){return parseInt(document.getElementById('volSlider').value);}
+function delayMs(){return parseInt(document.getElementById('delaySlider').value)*1000;}
+function stompThresh(){return parseFloat(document.getElementById('stompThresh').value);}
+function dragThresh(){return parseFloat(document.getElementById('dragThresh').value);}
+function dragMinDurMs(){return parseInt(document.getElementById('dragMinDur').value)*1000;}
+
+/* ── MODE SWITCH ── */
+function switchMode(m){
+  mode=m; stopMic(); cancelAll();
+  motionOk=false;soundOk=false;micOk=false;
+  stompActive=false;dragActive=false;stompCooling=false;dragCooling=false;
+  document.getElementById('modePhone').classList.toggle('active',m==='phone');
+  document.getElementById('modePC').classList.toggle('active',m==='pc');
+  document.getElementById('phoneSetup').classList.toggle('hidden',m!=='phone');
+  document.getElementById('pcSetup').classList.toggle('hidden',m!=='pc');
+  resetSetupUI();resetMeters();
+  setSdot('idle','Idle — complete setup above');
+  document.getElementById('stompDurBadge').innerHTML='';
+  document.getElementById('dragDurBadge').innerHTML='';
+  if(m==='phone'){
+    document.getElementById('stompThresh').min=1;document.getElementById('stompThresh').max=25;
+    document.getElementById('stompThresh').value=8;document.getElementById('stv').textContent='8';
+    document.getElementById('dragThresh').min=1;document.getElementById('dragThresh').max=25;
+    document.getElementById('dragThresh').value=5;document.getElementById('dtv').textContent='5';
+    document.getElementById('tipText').textContent='📱 Place phone flat on floor · 🐹 Drag revenge stays below 96 Hz';
+  } else {
+    document.getElementById('stompThresh').min=30;document.getElementById('stompThresh').max=85;
+    document.getElementById('stompThresh').value=60;document.getElementById('stv').textContent='60';
+    document.getElementById('dragThresh').min=30;document.getElementById('dragThresh').max=85;
+    document.getElementById('dragThresh').value=45;document.getElementById('dtv').textContent='45';
+    document.getElementById('tipText').textContent='💻 Open via GitHub Pages · 🐹 Drag revenge stays below 96 Hz';
+  }
+}
+
+function resetSetupUI(){
+  ['motionDot','soundDot','micDot'].forEach(function(id){document.getElementById(id).className='dot';});
+  ['motionBtn','soundBtn','micBtn'].forEach(function(id){document.getElementById(id).className='step-btn';});
+  document.getElementById('motionLabel').textContent='Step 1 — Allow motion sensor';
+  document.getElementById('soundLabel').textContent='Step 2 — Arm the sound';
+  document.getElementById('micLabel').textContent='Click here — allow microphone access';
+  document.getElementById('micInfo').className='info-box hidden';
+}
+
+function resetMeters(){
+  ['stompMeter','dragMeter'].forEach(function(id){
+    document.getElementById(id).textContent='0.00';
+    document.getElementById(id).className='meter-num green';
+  });
+  ['stompBar','dragBar'].forEach(function(id){
+    document.getElementById(id).style.width='0%';
+    document.getElementById(id).className='mini-bar';
+  });
+}
+
+/* ── PHONE SETUP ── */
+function requestMotion(){
+  if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
+    DeviceMotionEvent.requestPermission().then(function(s){
+      if(s==='granted') grantMotion();
+      else setStepError('motionBtn','motionDot','motionLabel','Denied — Settings > Safari > Motion & Orientation > ON');
+    }).catch(function(){setStepError('motionBtn','motionDot','motionLabel','Error — reload in Safari');});
+  } else { grantMotion(); }
+}
+
+function grantMotion(){
+  motionOk=true;
+  setStepDone('motionBtn','motionDot','motionLabel','Step 1 — Motion sensor active ✓');
+  window.addEventListener('devicemotion',onMotion);
+  if(soundOk) setReady();
+}
+
+function armSound(){
+  actx=new(window.AudioContext||window.webkitAudioContext)();
+  var o=actx.createOscillator(),g=actx.createGain();
+  o.connect(g);g.connect(actx.destination);
+  g.gain.setValueAtTime(0.001,actx.currentTime);
+  o.start();o.stop(actx.currentTime+0.01);
+  soundOk=true;
+  setStepDone('soundBtn','soundDot','soundLabel','Step 2 — Sound armed ✓');
+  if(motionOk) setReady();
+}
+
+/* ── PC SETUP ── */
+function startMic(){
+  if(!actx) actx=new(window.AudioContext||window.webkitAudioContext)();
+  actx.resume().then(function(){
+    navigator.mediaDevices.getUserMedia({audio:true,video:false})
+    .then(function(stream){
+      micStream=stream;
+      analyser=actx.createAnalyser();
+      analyser.fftSize=2048;
+      analyser.smoothingTimeConstant=0.3;
+      actx.createMediaStreamSource(stream).connect(analyser);
+      freqData=new Uint8Array(analyser.frequencyBinCount);
+      micOk=true;
+      setStepDone('micBtn','micDot','micLabel','Microphone active ✓');
+      document.getElementById('micInfo').className='info-box hidden';
+      setReady(); micLoop();
+    })
+    .catch(function(err){
+      var msg='';
+      if(err.name==='NotAllowedError'){
+        msg='<strong>Mic blocked.</strong> Mic only works on HTTPS pages, not local files.<br><br>'
+           +'<strong>Fix:</strong> Upload index.html to GitHub Pages, open that URL in Chrome/Edge, '
+           +'click the lock icon → Microphone → Allow → reload.';
+      } else if(err.name==='NotFoundError'){
+        msg='<strong>No microphone found.</strong> Check Windows sound settings.';
+      } else {
+        msg='<strong>Error:</strong> '+err.name+' — '+err.message;
+      }
+      setStepError('micBtn','micDot','micLabel','Mic error — read below');
+      var box=document.getElementById('micInfo');
+      box.innerHTML=msg; box.className='info-box';
+    });
+  });
+}
+
+function micLoop(){
+  if(!micOk||mode!=='pc') return;
+  analyser.getByteFrequencyData(freqData);
+
+  // overall RMS → dB
+  var sum=0;
+  for(var i=0;i<freqData.length;i++) sum+=(freqData[i]/255)*(freqData[i]/255);
+  var rms=Math.sqrt(sum/freqData.length);
+  var db=rms>0?Math.round(20*Math.log10(rms)+90):0;
+
+  // mid-frequency energy (300–3000 Hz) for drag detection
+  var midEnergy=getMidEnergy();
+
+  processLevels(db, midEnergy, db);
+  rafId=requestAnimationFrame(micLoop);
+}
+
+function stopMic(){
+  if(rafId) cancelAnimationFrame(rafId);
+  if(micStream){micStream.getTracks().forEach(function(t){t.stop();});micStream=null;}
+  micOk=false;
+}
+
+/* ── PHONE MOTION ── */
+function onMotion(e){
+  if(mode!=='phone') return;
+  var acc=e.accelerationIncludingGravity; if(!acc) return;
+  var x=acc.x||0,y=acc.y||0,z=acc.z||0;
+  var g=Math.sqrt(x*x+y*y+z*z)/9.8;
+  // phone uses g-force for both (no freq separation available from accelerometer)
+  processLevels(g, g, g);
+}
+
+/* ── FREQUENCY ANALYSIS (PC only) ── */
+function getMidEnergy(){
+  // bins covering ~300–3000 Hz — the drag/scrape zone
+  var sr=actx.sampleRate;
+  var binHz=sr/analyser.fftSize;
+  var lo=Math.floor(300/binHz), hi=Math.floor(3000/binHz);
+  var sum=0, count=0;
+  for(var i=lo;i<=hi&&i<freqData.length;i++){sum+=(freqData[i]/255)*(freqData[i]/255);count++;}
+  var rms=count>0?Math.sqrt(sum/count):0;
+  return rms>0?Math.round(20*Math.log10(rms)+90):0;
+}
+
+/* ── MAIN LEVEL PROCESSOR ── */
+function processLevels(overall, midLevel, displayVal){
+  var ready=(mode==='phone')?(motionOk&&soundOk):(micOk);
+  if(!ready) return;
+
+  var st=stompThresh(), dt=dragThresh();
+  var isPC=(mode==='pc');
+
+  // UPDATE STOMP METER
+  var sPct=isPC?Math.min(100,(overall/90)*100):Math.min(100,(overall/25)*100);
+  var sLabel=isPC?(overall+' dB'):(overall.toFixed?overall.toFixed(2)+' G':overall+' G');
+  updateMiniMeter('stompMeter','stompBar',sLabel,sPct,overall,st,'s');
+
+  // UPDATE DRAG METER — show mid energy on PC, overall on phone
+  var dVal=isPC?midLevel:overall;
+  var dPct=isPC?Math.min(100,(dVal/90)*100):Math.min(100,(dVal/25)*100);
+  var dLabel=isPC?(dVal+' dB'):(dVal.toFixed?dVal.toFixed(2)+' G':dVal+' G');
+  updateMiniMeter('dragMeter','dragBar',dLabel,dPct,dVal,dt,'d');
+
+  // STOMP DETECTION — short spike
+  if(overall>st&&!stompCooling){
+    if(!stompActive){
+      stompActive=true; stompStart=Date.now();
+    }
+    if(stompEndTimer) clearTimeout(stompEndTimer);
+    stompEndTimer=setTimeout(stompEnded,350);
+  }
+
+  // DRAG DETECTION — sustained mid-frequency noise
+  if(dVal>dt&&!dragCooling){
+    if(!dragActive){
+      dragActive=true; dragStart=Date.now();
+      setSdot('dragging','Dragging detected... measuring duration 〰️');
+    }
+    if(dragEndTimer) clearTimeout(dragEndTimer);
+    dragEndTimer=setTimeout(dragEnded,600); // longer settle for drag
+  }
+}
+
+/* ── STOMP EVENTS ── */
+function stompEnded(){
+  if(!stompActive) return;
+  stompActive=false;
+  var dur=Date.now()-stompStart;
+  if(dur<120) return;
+  stompTotal++;
+  var val=document.getElementById('stompMeter').textContent;
+  setSdot('stomping','Stomp ended ('+msToStr(dur)+') — revenge in '+document.getElementById('delaySlider').value+'s...');
+  document.getElementById('stompDurBadge').innerHTML='<div class="dur-badge s">Last stomp: '+msToStr(dur)+'</div>';
+  addLog('stomp',val,dur);
+  triggerFlash('stomp');
+  if(autoOn) scheduleRevenge('stomp',dur);
+}
+
+/* ── DRAG EVENTS ── */
+function dragEnded(){
+  if(!dragActive) return;
+  dragActive=false;
+  var dur=Date.now()-dragStart;
+  if(dur<dragMinDurMs()) return; // ignore short drags below min duration
+  dragTotal++;
+  var val=document.getElementById('dragMeter').textContent;
+  setSdot('dragging','Drag ended ('+msToStr(dur)+') — revenge in '+document.getElementById('delaySlider').value+'s...');
+  document.getElementById('dragDurBadge').innerHTML='<div class="dur-badge d">Last drag: '+msToStr(dur)+'</div>';
+  addLog('drag',val,dur);
+  triggerFlash('drag');
+  if(autoOn) scheduleRevenge('drag',dur);
+}
+
+/* ── REVENGE SCHEDULING ── */
+function scheduleRevenge(type, dur){
+  var delay=delayMs();
+  if(delay===0){ fireRevenge(type,dur); return; }
+
+  var cWrap=document.getElementById(type+'Countdown');
+  var cBar=document.getElementById(type+'CountdownBar');
+  var cLabel=document.getElementById(type+'CountdownLabel');
+  cWrap.className='countdown-wrap show';
+  cBar.style.width='100%';
+
+  var start=Date.now();
+  var rafRef;
+  function tick(){
+    var elapsed=Date.now()-start;
+    var pct=Math.max(0,100-(elapsed/delay)*100);
+    var secLeft=Math.ceil((delay-elapsed)/1000);
+    cBar.style.width=pct.toFixed(1)+'%';
+    cLabel.textContent=(type==='stomp'?'STOMP':'DRAG')+' REVENGE IN '+secLeft+'s...';
+    if(elapsed<delay){ rafRef=requestAnimationFrame(tick); }
+    else { cWrap.className='countdown-wrap'; fireRevenge(type,dur); }
+  }
+  if(type==='stomp'){ stompCountdownRaf=rafRef; }
+  else { dragCountdownRaf=rafRef; }
+  rafRef=requestAnimationFrame(tick);
+}
+
+function fireRevenge(type,dur){
+  setSdot(type==='stomp'?'revenging':'drag-revenge',
+    (type==='stomp'?'💥 STOMP':'〰️ DRAG')+' REVENGE FIRING 😤 ('+msToStr(dur)+')');
+  if(type==='stomp') playStompRevenge(dur);
+  else playDragRevenge(dur);
+  setTimeout(function(){
+    setSdot('on','Listening... waiting for upstairs gremlin 👀');
+    if(type==='stomp') stompCooling=false;
+    else dragCooling=false;
+  }, dur+500);
+  if(type==='stomp') stompCooling=true;
+  else dragCooling=true;
+}
+
+function cancelAll(){
+  if(stompRevengeTimer) clearTimeout(stompRevengeTimer);
+  if(dragRevengeTimer) clearTimeout(dragRevengeTimer);
+  if(stompCountdownRaf) cancelAnimationFrame(stompCountdownRaf);
+  if(dragCountdownRaf) cancelAnimationFrame(dragCountdownRaf);
+  stopDragSound();
+  ['stompCountdown','dragCountdown'].forEach(function(id){
+    document.getElementById(id).className='countdown-wrap';
+  });
+}
+
+/* ── SOUND ENGINE ── */
+function makeOut(ctx){
+  var master=actx.createGain();
+  master.gain.value=vol()*1.6;
+  var comp=actx.createDynamicsCompressor();
+  comp.threshold.value=-1; comp.knee.value=0;
+  comp.ratio.value=20; comp.attack.value=0.0001; comp.release.value=0.05;
+  master.connect(comp); comp.connect(ctx.destination);
+  return master;
+}
+
+/* STOMP SOUNDS */
+function playStompRevenge(dur){
+  if(!actx){armSound();return;}
+  var ctx=actx; if(ctx.state==='suspended') ctx.resume();
+  if(!dur||dur<500) dur=2000;
+  var secs=dur/1000;
+  if(selStomp==='thud') playThud(ctx,secs);
+  else if(selStomp==='bass') playBass(ctx,secs);
+  else if(selStomp==='alarm') playAlarm(ctx,secs);
+  else if(selStomp==='knock') playKnock(ctx,secs);
+}
+
+function playThud(ctx,secs){
+  var out=makeOut(ctx); var now=ctx.currentTime;
+  var hits=Math.max(1,Math.floor(secs/0.7));
+  for(var i=0;i<hits;i++){
+    (function(i){
+      var t=now+i*0.7;
+      [[45,5.0],[80,4.0],[30,5.5]].forEach(function(p){
+        var o=ctx.createOscillator(),g=ctx.createGain();
+        o.connect(g);g.connect(out);o.type='sine';
+        o.frequency.setValueAtTime(p[0],t);
+        o.frequency.exponentialRampToValueAtTime(p[0]*0.12,t+0.6);
+        g.gain.setValueAtTime(p[1],t);
+        g.gain.exponentialRampToValueAtTime(0.001,t+0.65);
+        o.start(t);o.stop(t+0.65);
+      });
+      var ck=ctx.createOscillator(),cg=ctx.createGain();
+      ck.connect(cg);cg.connect(out);ck.type='square';ck.frequency.value=120;
+      cg.gain.setValueAtTime(3.0,t);cg.gain.exponentialRampToValueAtTime(0.001,t+0.04);
+      ck.start(t);ck.stop(t+0.04);
+    })(i);
+  }
+}
+
+function playBass(ctx,secs){
+  var out=makeOut(ctx); var now=ctx.currentTime;
+  var hits=Math.max(1,Math.floor(secs/0.35));
+  for(var i=0;i<hits;i++){
+    (function(i){
+      var t=now+i*0.35;
+      var o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(out);o.type='sawtooth';o.frequency.value=60;
+      g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(4.0,t+0.03);
+      g.gain.exponentialRampToValueAtTime(0.001,t+0.3);
+      o.start(t);o.stop(t+0.32);
+      var s=ctx.createOscillator(),sg=ctx.createGain();
+      s.connect(sg);sg.connect(out);s.type='sine';s.frequency.value=30;
+      sg.gain.setValueAtTime(0,t);sg.gain.linearRampToValueAtTime(5.0,t+0.03);
+      sg.gain.exponentialRampToValueAtTime(0.001,t+0.3);
+      s.start(t);s.stop(t+0.32);
+    })(i);
+  }
+}
+
+function playAlarm(ctx,secs){
+  var out=makeOut(ctx); var now=ctx.currentTime;
+  var hits=Math.max(2,Math.floor(secs/0.13));
+  for(var i=0;i<hits;i++){
+    (function(i){
+      var o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g);g.connect(out);o.type='square';
+      o.frequency.value=i%2===0?900:650;
+      var t=now+i*0.13;
+      g.gain.setValueAtTime(0.8,t);g.gain.setValueAtTime(0,t+0.1);
+      o.start(t);o.stop(t+0.14);
+    })(i);
+  }
+}
+
+function playKnock(ctx,secs){
+  var out=makeOut(ctx); var now=ctx.currentTime;
+  var hits=Math.max(1,Math.floor(secs/0.35));
+  for(var i=0;i<hits;i++){
+    (function(i){
+      var t=now+i*0.35;
+      var sr=ctx.sampleRate, len=Math.floor(sr*0.16);
+      var buf=ctx.createBuffer(1,len,sr), d=buf.getChannelData(0);
+      for(var j=0;j<len;j++) d[j]=(Math.random()*2-1)*Math.exp(-j/(sr*0.028));
+      var src=ctx.createBufferSource(),gn=ctx.createGain();
+      var bp=ctx.createBiquadFilter();bp.type='bandpass';bp.frequency.value=180;bp.Q.value=0.7;
+      var ls=ctx.createBiquadFilter();ls.type='lowshelf';ls.frequency.value=250;ls.gain.value=18;
+      var pk=ctx.createBiquadFilter();pk.type='peaking';pk.frequency.value=100;pk.gain.value=14;pk.Q.value=1.0;
+      src.buffer=buf;
+      src.connect(bp);bp.connect(ls);ls.connect(pk);pk.connect(gn);gn.connect(out);
+      gn.gain.value=6.0;
+      src.start(t);
+      var sub=ctx.createOscillator(),sg=ctx.createGain();
+      sub.connect(sg);sg.connect(out);sub.type='sine';
+      sub.frequency.setValueAtTime(90,t);
+      sub.frequency.exponentialRampToValueAtTime(22,t+0.18);
+      sg.gain.setValueAtTime(5.0,t);sg.gain.exponentialRampToValueAtTime(0.001,t+0.2);
+      sub.start(t);sub.stop(t+0.2);
+      var ck=ctx.createOscillator(),ckg=ctx.createGain();
+      ck.connect(ckg);ckg.connect(out);ck.type='square';ck.frequency.value=200;
+      ckg.gain.setValueAtTime(2.5,t);ckg.gain.exponentialRampToValueAtTime(0.001,t+0.025);
+      ck.start(t);ck.stop(t+0.025);
+    })(i);
+  }
+}
+
+/*
+  DRAG REVENGE — HAMSTER SAFE
+  Pure sine waves ONLY at 55, 70, 85 Hz
+  All strictly below 96 Hz — hamster cannot hear this
+  Humans and upstairs neighbour feel it as deep rumbling bass
+*/
+function playDragRevenge(dur){
+  if(!actx){armSound();return;}
+  var ctx=actx; if(ctx.state==='suspended') ctx.resume();
+  if(!dur||dur<1000) dur=3000;
+  var secs=dur/1000;
+  stopDragSound();
+
+  // master output with hard limiter
+  var master=ctx.createGain();
+  master.gain.value=vol()*2.0; // boosted for low freq (speakers lose bass efficiency)
+  var comp=ctx.createDynamicsCompressor();
+  comp.threshold.value=-1; comp.knee.value=0;
+  comp.ratio.value=20; comp.attack.value=0.0001; comp.release.value=0.05;
+  master.connect(comp); comp.connect(ctx.destination);
+
+  var now=ctx.currentTime;
+  var nodes=[];
+
+  /*
+    Three pure sine layers — all below 96 Hz
+    55 Hz — deepest sub rumble (floor shaker)
+    70 Hz — main body
+    85 Hz — top layer (still below 96 Hz cutoff)
+    Amplitude modulated slowly so it sounds like a sustained drone/growl
+  */
+  [55, 70, 85].forEach(function(freq, i){
+    var osc=ctx.createOscillator();
+    var gainNode=ctx.createGain();
+    var lfo=ctx.createOscillator(); // slow wobble 0.5–1 Hz
+    var lfoGain=ctx.createGain();
+
+    osc.type='sine'; // MUST be sine — no harmonics
+    osc.frequency.value=freq;
+
+    // LFO modulates amplitude — creates pulsing rumble effect
+    lfo.type='sine';
+    lfo.frequency.value=0.4+i*0.15; // 0.4, 0.55, 0.7 Hz
+    lfoGain.gain.value=0.3; // modulation depth
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(gainNode.gain); // AM modulation
+
+    var baseGain=[5.0, 4.5, 3.5][i];
+    gainNode.gain.setValueAtTime(baseGain, now);
+    gainNode.gain.linearRampToValueAtTime(baseGain*1.1, now+0.3);
+    // fade out last 0.5s
+    gainNode.gain.setValueAtTime(baseGain, now+secs-0.5);
+    gainNode.gain.linearRampToValueAtTime(0.001, now+secs);
+
+    osc.connect(gainNode);
+    gainNode.connect(master);
+
+    osc.start(now); osc.stop(now+secs);
+    lfo.start(now); lfo.stop(now+secs);
+    nodes.push(osc,lfo);
+  });
+
+  dragNodes=nodes;
+}
+
+function stopDragSound(){
+  dragNodes.forEach(function(n){try{n.stop();}catch(e){}});
+  dragNodes=[];
+}
+
+/* ── UI HELPERS ── */
+function setReady(){
+  setSdot('on','Listening... waiting for upstairs gremlin 👀');
+}
+
+function setSdot(state,msg){
+  var d=document.getElementById('sdot');
+  d.className='sdot'+(state!=='idle'?' '+state:'');
+  document.getElementById('stext').textContent=msg;
+}
+
+function setStepDone(b,dot,lbl,msg){
+  document.getElementById(b).className='step-btn done';
+  document.getElementById(dot).className='dot done';
+  document.getElementById(lbl).textContent=msg;
+}
+
+function setStepError(b,dot,lbl,msg){
+  document.getElementById(b).className='step-btn error';
+  document.getElementById(dot).className='dot error';
+  document.getElementById(lbl).textContent=msg;
+}
+
+function updateMiniMeter(mId,bId,label,pct,val,thresh,type){
+  var m=document.getElementById(mId), b=document.getElementById(bId);
+  m.textContent=label;
+  b.style.width=pct.toFixed(1)+'%';
+  if(val>thresh){
+    m.className='meter-num danger';
+    b.className=type==='d'?'mini-bar drag':'mini-bar danger';
+  } else if(val>thresh*0.75){
+    m.className='meter-num warn';
+    b.className='mini-bar warn';
+  } else {
+    m.className='meter-num green';
+    b.className=type==='d'?'mini-bar drag':'mini-bar';
+  }
+}
+
+function triggerFlash(type){
+  var f=document.getElementById('flash');
+  f.className='flash '+(type==='stomp'?'stomp-flash':'drag-flash')+' on';
+  setTimeout(function(){f.className='flash '+(type==='stomp'?'stomp-flash':'drag-flash');},180);
+}
+
+function addLog(type, val, dur){
+  var isEmpty=document.getElementById(type+'Empty');
+  if(isEmpty) isEmpty.remove();
+  var total=type==='stomp'?++stompTotal:++dragTotal; // already incremented above
+  // fix: just use current count
+  var cnt=type==='stomp'?stompTotal:dragTotal;
+  document.getElementById(type+'Count').textContent=cnt;
+  var t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  var item=document.createElement('div');
+  item.className='log-item '+type[0];
+  item.innerHTML='<div class="li-row"><span class="li-num">#'+cnt+'</span>'
+                +'<span class="li-val '+type[0]+'">'+val+'</span></div>'
+                +'<div class="li-row"><span class="li-tm">'+t+'</span>'
+                +'<span class="li-dur">'+msToStr(dur)+'</span></div>';
+  var list=document.getElementById(type+'Log');
+  list.insertBefore(item,list.firstChild);
+}
+
+function clearLogs(){
+  ['stomp','drag'].forEach(function(type){
+    document.getElementById(type+'Log').innerHTML='<div class="empty" id="'+type+'Empty">None yet</div>';
+    document.getElementById(type+'Count').textContent='0';
+  });
+  stompTotal=0; dragTotal=0;
+}
+
+function pickStomp(el,s){
+  document.querySelectorAll('.sbtn').forEach(function(b){b.classList.remove('sel-stomp');});
+  el.classList.add('sel-stomp'); selStomp=s;
+}
+
+function toggleAuto(){
+  autoOn=!autoOn;
+  document.getElementById('tog').classList.toggle('on',autoOn);
+}
+
+function testStomp(){ if(!actx) armSound(); playStompRevenge(2000); }
+function testDrag(){ if(!actx) armSound(); playDragRevenge(3000); }
+
+function msToStr(ms){
+  if(ms<1000) return ms+'ms';
+  return (ms/1000).toFixed(1)+'s';
+}
+</script>
+</body>
+</html>
